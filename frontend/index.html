@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Imposter Chat </title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; margin: 20px; }
+    #chat { border: 1px solid #444; padding: 12px; height: 65vh; overflow: auto; border-radius: 8px; }
+    #bar { margin-top: 12px; display: flex; gap: 8px; }
+    input, select { padding: 8px; border-radius: 6px; border: 1px solid #aaa; }
+    input#msg { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>Imposter Chat ඞ </h1>
+
+  <div>
+    Room:
+    <select id="room">
+      <option value="lobby">lobby</option>
+      <option value="alpha">alpha</option>
+      <option value="beta">beta</option>
+    </select>
+    <button onclick="join()">Join</button>
+  </div>
+
+  <div id="chat"></div>
+
+  
+  <form id="bar" onsubmit="submitMsg(event); return false;" style="margin-top:12px; display:flex; gap:8px;">
+    <input
+      id="msg"
+      type="text"
+      autocomplete="off"
+      placeholder="Say something... type @score to see the leaderboard"
+      onkeydown="if (event.key==='Enter' && !event.shiftKey) { event.preventDefault(); window.send && window.send(); }"
+    />
+    <button type="submit">Send</button>
+    <input type="submit" hidden />
+  </form>
+
+  <!-- load client from CDN so 'io' is defined -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+  <script>
+  // connect to backend; do NOT force websocket only
+    const socket = io({ path: '/socket.io' });
+
+    const chat  = document.getElementById('chat');
+    const msg   = document.getElementById('msg');
+    const room  = document.getElementById('room');
+
+    socket.on('chat', (line) => {
+      const p = document.createElement('p');
+      p.textContent = line;
+      chat.appendChild(p);
+      chat.scrollTop = chat.scrollHeight;
+    });
+
+    function send() {
+      const value = msg.value.trim();
+      if (!value) return;
+      console.log('[send] emitting:', value);
+      socket.emit('chat', value);
+      msg.value = '';
+    }
+    window.send = send; 
+
+  
+    function submitMsg(e) {
+      e.preventDefault();
+      console.log('[submit] form submit');
+      send();
+      return false;
+    }
+    window.submitMsg = submitMsg;
+
+    
+    msg.addEventListener('keydown', (e) => {
+      console.log('[keydown]', e.key);
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    
+    function join() {
+      socket.emit('join', room.value);
+      chat.innerHTML = '';
+      msg.focus();
+    }
+    window.join = join;
+
+    
+    window.addEventListener('load', () => {
+      if (!room.value) room.value = 'lobby'; 
+      join();                                
+      msg.focus();
+    });
+
+  </script>
+</body>
+</html>

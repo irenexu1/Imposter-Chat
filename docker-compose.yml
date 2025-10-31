@@ -1,0 +1,144 @@
+x-common-env: &common-env
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  PGHOST: ${PGHOST:-postgres}
+  PGUSER: ${PGUSER:-imposter}
+  PGPASSWORD: ${PGPASSWORD:-imposter}
+  PGDATABASE: ${PGDATABASE:-imposter}
+  AI_URL: ${AI_URL:-http://mcp:8000/mcp/event}
+  AI_TRIGGERS: ${AI_TRIGGERS:-imposter,@bot}
+  AMBIENT_INACTIVITY_SEC: ${AMBIENT_INACTIVITY_SEC:-45}
+  AMBIENT_MIN_GAP_SEC: ${AMBIENT_MIN_GAP_SEC:-25}
+  AMBIENT_MAX_PER_MIN: ${AMBIENT_MAX_PER_MIN:-3}
+  AMBIENT_BASE_CHANCE: ${AMBIENT_BASE_CHANCE:-0.15}
+  AMBIENT_SALIENT_BOOST: ${AMBIENT_SALIENT_BOOST:-0.35}
+  AMBIENT_CONTEXT_LINES: ${AMBIENT_CONTEXT_LINES:-15}
+  AMBIENT_USE_REDIS_LOCK: ${AMBIENT_USE_REDIS_LOCK:-true}
+
+services:
+  # ---------- FRONTEND ----------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ---------- BACKEND ----------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      PORT: ${PORT:-3001}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      PGHOST: ${PGHOST:-postgres}
+      PGUSER: ${PGUSER:-imposter}
+      PGPASSWORD: ${PGPASSWORD:-imposter}
+      PGDATABASE: ${PGDATABASE:-imposter}
+      AI_URL: ${AI_URL:-http://mcp:8000/mcp/event}
+    depends_on:
+      mcp:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
+  # ---------- MCP API ----------
+  mcp:
+    build:
+      context: ./mcp
+      dockerfile: Dockerfile
+    image: imposter-chat/mcp:latest
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-http://host.docker.internal:11434/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-none}
+      OPENAI_MODEL: ${OPENAI_MODEL:-llama3}
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+
+  # ---------- CELERY WORKER ----------
+  worker:
+    image: imposter-chat/mcp:latest
+    command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "info"]
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-http://host.docker.internal:11434/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-none}
+      OPENAI_MODEL: ${OPENAI_MODEL:-llama3}
+    depends_on:
+      mcp:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ---------- FLOWER ----------
+  flower:
+    image: mher/flower:2.0
+    environment:
+      CELERY_BROKER_URL: ${REDIS_URL:-redis://redis:6379/0}
+      FLOWER_UNAUTHENTICATED_API: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5555:5555"
+
+  # ---------- REDIS ----------
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- POSTGRES ----------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${PGUSER:-imposter}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-imposter}
+      POSTGRES_DB: ${PGDATABASE:-imposter}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/db_init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-imposter} -d ${PGDATABASE:-imposter}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db_data: {}
+  redis_data: {}

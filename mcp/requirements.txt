@@ -1,0 +1,6 @@
+fastapi==0.114.0
+uvicorn==0.30.0
+redis==5.0.7
+celery==5.4.0
+requests==2.32.3
+pydantic==2.8.2

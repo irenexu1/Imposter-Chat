@@ -1,0 +1,14 @@
+name: ci
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build containers
+        run: docker compose build
+      - name: Lint server
+        run: |
+          docker run --rm -v ${{ github.workspace }}/server:/app -w /app node:20-alpine sh -lc "npm ci --omit=dev && node -e 'console.log(`ok`)'"
+      - name: Validate ai requirements
+        run: docker run --rm -v ${{ github.workspace }}/ai:/app -w /app python:3.11-slim sh -lc "pip install -r requirements.txt"

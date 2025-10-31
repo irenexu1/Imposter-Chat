@@ -165,14 +165,6 @@ Most settings are defined via `.env` (see `.env.example`):
 
 ---
 
-## 🔮 Future Improvements
-
-- Add message origin / server-ID to enable strict de-duplication.
-- Add GitHub Actions CI to spin up Docker services and run integration tests.
-- Expand leaderboard + identity mechanics.
-
----
-
 ## 🔍 Where to Look First
 
 | Component | Entry Point |
@@ -183,5 +175,3 @@ Most settings are defined via `.env` (see `.env.example`):
 | Tests | `backend/tests/*.js` |
 
 ---
-
-If you’d like a streamlined **developer cheat-sheet**, **architecture diagram**, or **production deployment guide**, just let me know!
